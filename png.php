@@ -3,10 +3,13 @@
   require_once "main.php";
   use roz\qr_code;
 
-  define("CELLS", 21);
-  define("CELL_SIZE", 12);
+  if(!isset($_GET["data"])){
+    echo "No input data.";
+    exit();
+  }
 
-  $a = new qr_code\QRCode("https://twitter.com/rozeo_s/", QR_LEVEL_H);
-  // print_r($s);
+  $level = QR_LEVEL_H;
+
+  $a = new qr_code\QRCode($_GET["data"], $level);
 
 ?>

@@ -80,7 +80,6 @@
         array_push($data, ($byte[$i] & 0b1111) << 4);
       }
 
-
       // push padding bits
       $code_byte = QR_DATACODE_SIZE[$model][$level];
       for($i = count($data), $j = 0; $i < $code_byte; $i++, $j++){
@@ -274,13 +273,13 @@
         }
       }
 
-      $mask_type = $this->CheckMask();
+      $mask_type = $this->CheckMask(-1);
       $type = ((QR_LEVEL_BIT[$this->level] << 3) ^ $mask_type);
       $type_info = BCH5_TABLE[$type];;
       $type_info ^= 0b101010000010010;
+      header(sprintf("MASK: %05b", $type));
 
       // 形式情報セット
-
       $offset = 0;
       for($i = 0; $i < 16; $i++){
         if($i < 8){
@@ -309,172 +308,43 @@
     }
 
     // マスク処理
-    private function CheckMask(){
+    private function CheckMask($mask = -1){
       $best_mask = [];
       $mask_type = 0;
       $best_score = 99999999;
 
-      /*
       // mask 1
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, ($x + $y) % 2 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
+      // (i+j) mod 2 = 0
+      for($i = 0; $i < 8; $i++){
+        $arr = $this->map_bits;
+        for($j = 0; $j < count($this->map_bits); $j++){
+          $x = $j % $this->qr_width;
+          $y = $j / $this->qr_width;
+          if($this->preserved_bits[$j] == 0){
+            if(MaskJudge($x, $y, $i)) $arr[$j] ^= 0b1;
           }
         }
-        if($best_score >= $this->CalculateScore($arr)){
+
+        $sc = $this->CalculateScore($arr);
+        if($best_score >= $sc){
+          $best_score = $sc;
           $best_mask = $arr;
-          $mask_type = QR_MASK_1;
+          $mask_type = $i;
         }
       }
-
-      // mask 2
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, $x % 2 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_2;
-        }
-      }
-
-      // mask 3
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, $y % 3 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_3;
-        }
-      }*/
-
-      // mask 4
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = (int)($i / $this->qr_width);
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, ($x + $y) % 3 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_4;
-        }
-      }
-      /*
-      // mask 5
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, (($x / 2) + ($y / 3)) % 2 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_5;
-        }
-      }
-
-      // mask 6
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, ($x * $y) % 2 + ($x + $y) % 3 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_6;
-        }
-      }
-
-      // mask 7
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, (($x + $y) % 2 + ($x * $y) % 3) % 2 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_7;
-        }
-      }
-
-
-      // mask 8
-      {
-        $arr = [];
-        for($i = 0; $i < count($this->map_bits); $i++){
-          $x = $i % $this->qr_width;
-          $y = $i / $this->qr_width;
-          if($this->preserved_bits[$i] == 0){
-            array_push($arr, (($x * $y) % 3 + ($x + $y) % 2) % 2 == 0 ?
-              (($this->map_bits[$i] == 0)? 1: 0): $this->map_bits[$i]);
-          }else{
-            array_push($arr, $this->map_bits[$i]);
-          }
-        }
-
-        if($best_score >= $this->CalculateScore($arr)){
-          $best_mask = $arr;
-          $mask_type = QR_MASK_8;
-        }
-      }*/
 
       $this->map_bits = $best_mask;
       return $mask_type;
     }
 
     private function CalculateScore(array $arr){
-      return 0;
+      $bs = 0;
+      $ws = 0;
+      for($i = 0; $i < $this->qr_width * $this->qr_width; $i++){
+        if($arr[$i] == 0) $ws++;
+        else              $bs++;
+      }
+      return abs($ws - $bs);
     }
 
     private function pos(int $x, int $y){

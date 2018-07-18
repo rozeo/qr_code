@@ -4,6 +4,10 @@ namespace roz\qr_code;
 require_once "a8galois.php";
 require_once "size_list.php";
 
+function _F($p){
+  return floor($p);
+}
+
 define("QR_QUIET_MARK", [
   [1, 1, 1, 1, 1, 1, 1],
   [1, 0, 0, 0, 0, 0, 1],
@@ -161,6 +165,43 @@ function CalculateRS(array $data, int $RS_size){
   }
 
   return array_slice($data, $step);
+}
+
+function MaskJudge(int $i, int $j, $mask){
+  switch($mask){
+  case 0:
+    if(($i + $j) % 2 == 0) return true;
+    return false;
+
+  case 1:
+    if($i % 2 == 0) return true;
+    return false;
+
+  case 2:
+    if($j % 3 == 0) return true;
+    return false;
+
+  case 3:
+    if(($i + $j) % 3 == 0) return true;
+    return false;
+
+  case 4:
+    if((_F($i / 2) + _F($j / 3)) % 2 == 0) return true;
+    return false;
+
+  case 5:
+    if(($i * $j) % 2 + ($i * $j) % 3 == 0) return true;
+    return false;
+
+  case 6:
+    if((($i * $j) % 2 + ($i * $j) % 3) % 2 == 0) return true;
+    return false;
+
+  case 7:
+    if((($i * $j) % 3 + ($i + $j) % 2) % 2 == 0) return true;
+    return false;
+  }
+  return false;
 }
 
 ?>
