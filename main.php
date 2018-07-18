@@ -3,11 +3,6 @@
   namespace roz\qr_code;
   require_once "qr_data/def.php";
 
-  define("DATA_CODE_BYTES", 9);
-  define("DATA_BLOCKS", 1);
-  define("DATA_BLOCK_SIZE", [9]);
-  define("RS_BLOCK_SIZE", [17]);
-
   function debugOutout($str){
     if(!isset($_GET["view"])) echo $str;
   }
