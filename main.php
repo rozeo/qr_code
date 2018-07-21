@@ -38,7 +38,7 @@
         // モードビット(4bit) + サイズビット(16bit) + 終端ビット(4bit) = 3byte
         $req_size = 2 + $size;
 
-        for($i = 6; $i > 0; $i--){
+        for($i = 4; $i > 0; $i--){
           // モデル9以下は1byte減
           if($i == 9) $req_size -= 1;
 
@@ -52,7 +52,10 @@
         $model--;
       }
 
-      if($model > 6) return;
+      if($model > 4){
+        echo sprintf("Not Accepted model size");
+        return;
+      }
 
       $this->model = $model;
       $this->level = $level;
@@ -202,7 +205,12 @@
 
       $split_size = count(QR_DATACODE_SPLIT_SIZE[$this->model][$this->level]);
 
-      for($i = 0; $i < QR_DATACODE_SIZE[$this->model][$this->level]; $i++){
+      $offset = 0;
+      for($i = 0; $i < QR_DATACODE_SIZE[$this->model][$this->level] + $offset; $i++){
+        if(!isset($this->data_block[$i % $split_size][$i / $split_size])){
+          $offset++;
+          continue;
+        }
         for($j = 0; $j < 8;){
           if($this->preserved_bits[$this->pos($tx, $ty)] == 0){
             $bit = ($this->data_block[$i % $split_size][$i / $split_size] >> (7 - $j)) & 0b1;
@@ -235,8 +243,8 @@
       }
 
       // put rs
-
-      for($i = 0; $i < QR_RS_BLOCK_SIZE[$this->model][$this->level] * $split_size; $i++){
+      $offset = 0;
+      for($i = 0; $i < QR_RS_BLOCK_SIZE[$this->model][$this->level] * $split_size + $offset; $i++){
         for($j = 0; $j < 8;){
           if($this->preserved_bits[$this->pos($tx, $ty)] == 0){
             $bit = ($this->RS_block[$i % $split_size][$i / $split_size] >> (7 - $j)) & 0b1;
@@ -273,11 +281,12 @@
         }
       }
 
-      $mask_type = $this->CheckMask(-1);
+      $mask_type = $this->checkMask();
       $type = ((QR_LEVEL_BIT[$this->level] << 3) ^ $mask_type);
       $type_info = BCH5_TABLE[$type];;
       $type_info ^= 0b101010000010010;
       header(sprintf("MASK: %05b", $type));
+      header(sprintf("MODEL: %d-%d", $this->model, $this->level));
 
       // 形式情報セット
       $offset = 0;
@@ -308,24 +317,23 @@
     }
 
     // マスク処理
-    private function CheckMask($mask = -1){
+    private function checkMask($mask = -1){
       $best_mask = [];
       $mask_type = 0;
       $best_score = 99999999;
 
-      // mask 1
-      // (i+j) mod 2 = 0
       for($i = 0; $i < 8; $i++){
+        if($mask >= 0 && $i != $mask) continue;
         $arr = $this->map_bits;
         for($j = 0; $j < count($this->map_bits); $j++){
           $x = $j % $this->qr_width;
-          $y = $j / $this->qr_width;
+          $y = _F($j / $this->qr_width);
           if($this->preserved_bits[$j] == 0){
-            if(MaskJudge($x, $y, $i)) $arr[$j] ^= 0b1;
+            if(maskJudge($x, $y, $i)) $arr[$j] ^= 0b1;
           }
         }
 
-        $sc = $this->CalculateScore($arr);
+        $sc = $this->calculateScore($arr, $best_score);
         if($best_score >= $sc){
           $best_score = $sc;
           $best_mask = $arr;
@@ -334,17 +342,90 @@
       }
 
       $this->map_bits = $best_mask;
+      header(sprintf("BEST_SCORE: %d", $best_score));
       return $mask_type;
     }
 
-    private function CalculateScore(array $arr){
+    private function calculateScore(array $arr, int $n_score = 999999999){
+      $score = 0;
+      $bits = $this->qr_width * $this->qr_width;
       $bs = 0;
       $ws = 0;
-      for($i = 0; $i < $this->qr_width * $this->qr_width; $i++){
+
+      // $score += $this->judgeMaskScore1();
+      if($score > $n_score) return $score;
+
+      for($i = 0; $i < $bits; $i++){
+        $x = $i % $this->qr_width;
+        $y = _F($i / $this->qr_width);
+
+
+        $score += $this->judgeMaskScore2($x, $y);
+        if($score > $n_score) return $score;
+
         if($arr[$i] == 0) $ws++;
         else              $bs++;
       }
-      return abs($ws - $bs);
+
+      // p4
+      $bp = $bs * 100 / $bits;
+      if(abs($bp - 50) >= 5) $score += 10 * _F(abs($bp - 50) / 5);
+
+      return $score;
+    }
+
+    private function judgeMaskScore1(){
+
+      $score = 0;
+      for($xy_prefix = 0; $xy_prefix < $this->qr_width; $xy_prefix++){
+        $p_bit = $this->map_bits[$this->pos($xy_prefix, 0)];
+        $bit_cnt = 1;
+
+        // 縦探査
+        $sy = 0;
+        for($y = 1; $y < $this->qr_width; $y++){
+          if($this->map_bits[$this->pos($xy_prefix, $y)] == $p_bit){
+            $bit_cnt++;
+          }else{
+            if($bit_cnt >= 5){
+
+            $score += 3 + ($bit_cnt - 5);
+
+            // echo sprintf("Find bit, sy: %d, y: %d[%d]<br>", $sy, $y, $score);
+          }
+
+            $bit_cnt = 1;
+            $p_bit = $this->map_bits[$this->pos($xy_prefix, $y)];
+            $sy = $y;
+          }
+        }
+        if($bit_cnt >= 5) $score += 3 + ($bit_cnt - 5);
+
+        // 横探査
+        $p_bit = $this->map_bits[$this->pos(0, $xy_prefix)];
+        $bit_cnt = 0;
+        for($x = 1; $x < $this->qr_width; $x++){
+          if($this->map_bits[$this->pos($x, $xy_prefix)] == $p_bit){
+            $bit_cnt++;
+          }else{
+            if($bit_cnt >= 5) $score += 3 + ($bit_cnt - 5);
+            $bit_cnt = 1;
+          }
+        }
+        if($bit_cnt >= 5) $score += 3 + ($bit_cnt - 5);
+      }
+      return $score;
+    }
+
+    private function judgeMaskScore2(int $x, int $y){
+      if($x + 1 == $this->qr_width || $y + 1 == $this->qr_width) return 0;
+
+      $bit = $this->map_bits[$this->pos($x + 1, $y)];
+      if($bit != $this->map_bits[$this->pos($x + 1, $y)]) return 0;
+      if($bit != $this->map_bits[$this->pos($x, $y + 1)]) return 0;
+      if($bit != $this->map_bits[$this->pos($x + 1, $y + 1)]) return 0;
+
+      return 3;
     }
 
     private function pos(int $x, int $y){
